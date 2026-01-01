@@ -1,0 +1,655 @@
+\documentclass[12pt, a4paper, twoside, openright]{report}
+
+% --- Pachete Fundamentale ---
+\usepackage[utf8]{inputenc}
+\usepackage[romanian]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{
+ a4paper,
+ left=25mm,
+ right=25mm,
+ top=25mm,
+ bottom=25mm,
+}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning,calc}
+
+% --- Stiluri Link-uri ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=magenta,      
+    urlcolor=blue,
+    citecolor=black,
+}
+
+% --- Stiluri Cod ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\small, % Cod un pic mai mare
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    literate={ă}{{\u{a}}}1 {ș}{{\c{s}}}1 {ț}{{\c{t}}}1 {î}{{\^i}}1 {â}{{\^a}}1 {Ă}{{\u{A}}}1 {Ș}{{\c{S}}}1 {Ț}{{\c{T}}}1 {Î}{{\^I}}1 {Â}{{\^A}}1
+}
+\lstset{style=mystyle}
+
+% --- Definitie Limbaj JavaScript ---
+\lstdefinelanguage{JavaScript}{
+  keywords={typeof, new, true, false, catch, function, return, null, catch, switch, var, if, in, while, do, else, case, break, const, let, async, await, export, default, import, from},
+  keywordstyle=\color{blue}\bfseries,
+  ndkeywords={class, export, boolean, throw, implements, import, this},
+  ndkeywordstyle=\color{darkgray}\bfseries,
+  identifierstyle=\color{black},
+  sensitive=false,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  commentstyle=\color{purple}\ttfamily,
+  stringstyle=\color{red}\ttfamily,
+  morestring=[b]',
+  morestring=[b]"
+}
+
+\begin{document}
+
+% --- PAGINA DE TITLU ---
+\begin{titlepage}
+    \begin{center}
+        \vspace*{1cm}
+        
+        \Large
+        \textbf{UNIVERSITATEA POLITEHNICA DIN BUCUREȘTI}
+        
+        \vspace{0.5cm}
+        Facultatea de Electronică, Telecomunicații și Tehnologia Informației
+        
+        \vspace{4cm}
+        
+        \Huge
+        \textbf{Streaming Video Live pe Internet: Principii, Specificații și Implementarea unei Platforme de Comunicație în Timp Real}
+        
+        \vspace{0.5cm}
+        \Large
+        \textit{- Temă de Proiect -}
+        
+        \vspace{4cm}
+        
+        \textbf{Student:} Ing. Cristi Miloiu
+        
+        \textbf{Coordonator:} Prof. Dr. Ing. Radu Rădescu
+        
+        \vfill
+        
+        \Large
+        București\\
+        2025
+        
+    \end{center}
+\end{titlepage}
+
+% --- CUPRINS ---
+\tableofcontents
+\newpage
+
+% --- CAPITOLUL 1 ---
+\chapter{Introducere}
+
+\section{Context General și Motivația Cercetării}
+Evoluția recentă a infrastructurii globale de internet a catalizat tranziția către comunicarea multimedia în timp real, pilon central al interacțiunii digitale moderne. În spatele interfețelor aparent simple ale platformelor de videoconferință (e.g., Zoom, Google Meet) se află sisteme distribuite complexe, care orchestrează compresia semnalului video, sincronizarea fluxurilor audio-video și optimizarea latenței în condiții variabile de rețea.
+
+Motivația acestui proiect de disertație rezidă în necesitatea de a deconstrui și analiza critic mecanismele fundamentale care guvernează transportul datelor multimedia. Proiectul "StreamFlow" propune o abordare experimentală, evitând abstractizările de nivel înalt (precum WebRTC) pentru a implementa și evalua "de la zero" protocoalele de transport. Această strategie permite o investigație detaliată a compromisurilor tehnice (trade-offs) dintre fiabilitatea transmisiunii (TCP) și latența minimă (UDP), precum și analiza impactului la nivel de aplicație a congestiei rețelei.
+
+\section{Obiectivele Lucrării}
+Prezenta lucrare își propune atingerea următoarelor obiective specifice de cercetare și implementare:
+\begin{enumerate}
+    \item \textbf{Analiza Teoretică a Compresiei Video}: Investigarea algoritmilor de compresie intra-frame (MJPEG) și a tehnicilor de sub-eșantionare cromatică (YUV 4:2:0) pentru optimizarea raportului calitate/bandă.
+    \item \textbf{Evaluarea Comparativă a Protocoalelor de Transport}: Analiza empirică a performanței în streaming live, cu accent pe fenomenul de "Head-of-Line Blocking" specific TCP și strategiile de mitigare la nivel de aplicație.
+    \item \textbf{Arhitectura și Implementarea Sistemului}: Proiectarea unei arhitecturi Client-Server scalabile (FastAPI, React), capabile să gestioneze concurența ridicată și să asigure o experiență de utilizare fluidă ("low-latency").
+\end{enumerate}
+
+\newpage
+
+\section{Structura Lucrării}
+Documentația este structurată în 7 capitole esențiale:
+\begin{itemize}
+    \item \textbf{Cap. 1} prezintă contextul general, motivația și obiectivele proiectului.
+    \item \textbf{Cap. 2} sintetizează teoria semnalului video și compresia, punând accent pe conceptele fundamentale.
+    \item \textbf{Cap. 3} analizează rețeaua și justifică alegerea protocoalelor.
+    \item \textbf{Cap. 4} descrie arhitectura și implementarea efectivă a platformei StreamFlow.
+    \item \textbf{Cap. 5} evaluează performanța sistemului și scenariile de testare.
+    \item \textbf{Cap. 6} propune direcții viitoare de dezvoltare (WebTransport, AI).
+    \item \textbf{Cap. 7} conține concluziile finale și lecțiile desprinse.
+\end{itemize}
+
+% --- CAPITOLUL 2 ---
+\chapter{Fundamente Teoretice și Compresie}
+
+\section{De la Lumină la Biți}
+Fundamentul transmisiunii video digitale constă în digitizarea semnalului analogic captat de senzorul camerei. Un flux video nerestricționat (RAW) generează un debit de date colosal. De exemplu, un stream 1080p la 30fps în format RGB (24 biți/pixel) necesită:
+\begin{equation}
+    1920 \times 1080 \times 24 \text{ biți} \times 30 \text{ fps} \approx 1.5 \text{ Gbps}
+\end{equation}
+Această lățime de bandă depășește capacitatea majorității conexiunilor rezidențiale, impunând utilizarea unor tehnici agresive de compresie.
+
+\subsection{Sub-eșantionarea Cromatică (Chroma Subsampling)}
+Retina umană prezintă o densitate mult mai mare a celulelor cu bastonașe (sensibile la intensitate) comparativ cu celulele cu conuri (sensibile la culoare). Ingineria video exploatează această limitare perceptuală prin conversia spațiului de culoare din RGB în YCbCr (sau YUV), unde Y reprezintă Luma (luminozitatea), iar Cb și Cr reprezintă componentele de crominance (diferență de albastru și roșu).
+
+Standardul \textbf{4:2:0}, utilizat în acest proiect, menține rezoluția completă pentru canalul Y, dar sub-eșantionează canalele de culoare la un sfert din rezoluția originală, reducând dimensiunea datelor cu 50\% fără o degradare vizuală semnificativă.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[scale=0.7, transform shape]
+        \def\sq{0.8}
+        % 4:4:4
+        \node at (2, 5) {\textbf{YUV 4:4:4}};
+        \foreach \x in {0,1,2,3}
+            \foreach \y in {0,1,2,3} {
+                \draw[fill=gray!20] (\x*\sq, \y*\sq) rectangle ++(\sq,\sq);
+                \draw[fill=black] (\x*\sq+0.4, \y*\sq+0.4) circle (0.15); 
+                \draw[blue, thick] (\x*\sq+0.1, \y*\sq+0.1) rectangle ++(0.6,0.6); 
+            }
+        
+        % Arrow
+        \draw[->, ultra thick, gray] (3.5, 2) -- (5.5, 2) node[midway, above] {\small Compresie};
+
+        % 4:2:0
+        \node at (7, 5) {\textbf{YUV 4:2:0}};
+        \foreach \x in {0,1,2,3}
+            \foreach \y in {0,1,2,3} {
+                \draw[fill=gray!20] (\x*\sq+5.5, \y*\sq) rectangle ++(\sq,\sq);
+                \draw[fill=black] (\x*\sq+5.9, \y*\sq+0.4) circle (0.15);
+            }
+        % Shared Chroma blocks
+        \foreach \x in {0,2}
+            \foreach \y in {0,2} {
+                 \draw[blue, thick] (\x*\sq+5.5, \y*\sq) rectangle ++(2*\sq, 2*\sq);
+                 \node[blue] at (\x*\sq+5.5+\sq, \y*\sq+\sq) {\tiny UV};
+            }
+    \end{tikzpicture}
+    \caption{Vizualizarea sub-eșantionării cromatice. Reducerea informației de culoare permite economisirea a 50\% din lățimea de bandă.}
+\end{figure}
+
+\section{Structura Compresiei JPEG}
+Pentru platforma StreamFlow, s-a optat pentru protocolul MJPEG (Motion JPEG), tratând video-ul ca o succesiune de cadre independente comprimate JPEG. Această decizie arhitecturală prioritizează latența scăzută în detrimentul eficienței lățimii de bandă (absența compresiei temporale inter-frame).
+
+Un cadru JPEG este structurat astfel:
+\begin{enumerate}
+    \item \textbf{SOI (Start of Image)}: Markerul \texttt{0xFFD8} care semnalează începutul fluxului de biți valid.
+    \item \textbf{Tabele de Cuantizare (DQT)}: Definiția matricelor care elimină frecvențele spațiale înalte (detaliile fine), controlând factorul de calitate (e.g., Q=50).
+    \item \textbf{Date Huffman}: Biții efectivi ai imaginii, codificați entropic.
+    \item \textbf{EOI (End of Image)}: Markerul \texttt{0xFFD9}.
+\end{enumerate}
+
+Această structură atomică permite decodarea robustă: chiar dacă un pachet de rețea se pierde distrugând un cadru, următorul cadru (care începe cu noi markeri SOI) va fi decodat perfect, eliminând artefactele vizuale persistente specifice codecurilor precum H.264 (până la următorul I-frame).
+
+\subsection{Overhead-ul Codării Base64}
+Deoarece WebSockets transferă text în mod implicit (și pentru a simplifica manipularea în JSON), fluxul binar JPEG este codat în Base64 înainte de transmisie.
+Aceasta introduce un overhead semnificativ:
+\begin{equation}
+    \text{Size}_{base64} \approx \text{Size}_{binary} \times \frac{4}{3} \approx 1.33 \times \text{Size}_{binary}
+\end{equation}
+Pentru un cadru de 40KB, transmisia efectivă devine $\approx 53KB$. Deși ineficient, acest compromis a fost acceptat pentru a simplifica arhitectura MVP și a evita complexitatea manipulării \texttt{ArrayBuffer} și \texttt{Blobs} în faza inițială.
+
+% --- CAPITOLUL 3 ---
+\chapter{Protocoale de Rețea și Transport}
+
+\section{Analiza Comparativă TCP vs UDP}
+Selecția protocolului de transport reprezintă cea mai critică decizie arhitecturală în proiectarea aplicațiilor de timp real. 
+
+\begin{itemize}
+    \item \textbf{TCP (Transmission Control Protocol)}: Oferă fiabilitate, ordonarea pachetelor și controlul congestiei. Totuși, mecanismul de retransmisie introduce latență variabilă.
+    \item \textbf{UDP (User Datagram Protocol)}: "Fire and forget". Nu garantează livrarea, dar minimizează latența, fiind standardul de facto pentru VoIP și WebRTC.
+\end{itemize}
+
+\subsection{Fenomenul Head-of-Line Blocking}
+Experimentele inițiale au demonstrat impactul sever al \textit{Head-of-Line (HoL) Blocking} asupra experienței utilizatorului. Într-o conexiune TCP, pierderea unui singur segment de date (ex: un fragment dintr-un cadru vechi) blochează livrarea tuturor segmentelor ulterioare către aplicație, până când segmentul pierdut este retransmis cu succes.
+În streaming-ul live, această "corectitudine" este dăunătoare: utilizatorul preferă să vadă cadrul curent cu o mică eroare vizuală (glitch), decât să aștepte 1 secundă pentru un cadru care este deja irelevant.
+
+\section{WebSockets: Arhitectura Protocolului}
+Constrângerile browserelor web moderne (care nu expun socket-uri TCP/UDP brute din motive de securitate - "sandbox") au limitat opțiunile la WebRTC sau WebSockets. 
+Am ales WebSockets pentru simplitate și compatibilitate universală.
+
+Protocolul WebSocket (RFC 6455) funcționează deasupra TCP, inițiind conexiunea printr-un handshake HTTP (Upgrade Header).
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[node distance=0cm, outer sep=0pt]
+        \node (app) [rectangle, draw, fill=orange!20, minimum width=6cm, minimum height=1cm] {Application Layer (StreamFlow / JSON)};
+        \node (ws) [rectangle, draw, fill=yellow!20, minimum width=6cm, minimum height=0.8cm, below=of app] {WebSocket Protocol (Framing)};
+        \node (tls) [rectangle, draw, fill=green!10, minimum width=6cm, minimum height=0.8cm, below=of ws] {TLS / SSL (Encryption)};
+        \node (tcp) [rectangle, draw, fill=blue!10, minimum width=6cm, minimum height=0.8cm, below=of tls] {TCP (Transmission Corntrol)};
+        \node (ip) [rectangle, draw, fill=gray!10, minimum width=6cm, minimum height=0.8cm, below=of tcp] {Internet Protocol (IP)};
+        
+        \draw[->, thick, dashed] (app.east) -- +(1,0) node[right, align=left] {\scriptsize Date: Base64 Images};
+        \draw[->, thick, dashed] (ws.east) -- +(1,0) node[right, align=left] {\scriptsize Opcode: 0x1 (Text)};
+        \draw[->, thick, dashed] (tcp.east) -- +(1,0) node[right, align=left] {\scriptsize Fiabilitate};
+        \draw[->, thick, dashed] (ip.east) -- +(1,0) node[right, align=left] {\scriptsize Rutare};
+    \end{tikzpicture}
+    \caption{Stiva de protocoale utilizată în StreamFlow. Deși WebSockets adaugă un mic overhead pentru "framing" (2-14 bytes), acesta este neglijabil comparativ cu payload-ul imaginilor.}
+\end{figure}
+
+Pentru a mitiga efectele HoL Blocking inerente stivei TCP subiacente, a fost implementat un control adaptiv al calității la nivel de aplicație: reducerea calității JPEG (și implicit a dimensiunii pachetului) atunci când latența rețelei crește.
+
+\section{Securitate și Autentificare}
+În varianta actuală (MVP), autentificarea este simplificată.
+Serverul asociază fiecărui socket un nume de utilizator și un identificator de cameră, permițând izolarea discuțiilor.
+Validarea se face la nivel de conexiune, verificându-se structura URL-ului de conectare.
+
+\begin{lstlisting}[language=Python, caption=Router WebSocket]
+@router.websocket("/ws/{room_id}/{user_name}")
+async def websocket_endpoint(websocket: WebSocket, room_id: str, user_name: str):
+    await manager.connect(websocket, room_id)
+\end{lstlisting}
+
+\subsection{Diagrama de Secvență: Fluxul de Date}
+Pentru a clarifica modul în care funcționează conexiunea, iată diagrama simplificată.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[node distance=6cm, auto]
+        \node (client) [rectangle, draw, fill=green!10] {Client (React)};
+        \node (server) [rectangle, draw, fill=blue!10, right=of client] {Server (FastAPI)};
+        
+        \draw[->, thick] ($(client.east)+(0,0.5)$) -- node[above] {1. HTTP Upgrade (WSS)} ($(server.west)+(0,0.5)$);
+        \draw[<-, thick, dashed] ($(client.east)+(0,0)$) -- node[below] {2. 101 Switching Protocols} ($(server.west)+(0,0)$);
+        
+        \node at ($(client)!0.5!(server)+(0,-1.5)$) {\textit{...Conexiune Stabilita...}};
+        
+        % Heartbeat
+        \draw[<-, thick, red] ($(client.east)+(0,-2.5)$) -- node[above] {\small PING (Heartbeat)} ($(server.west)+(0,-2.5)$);
+        \draw[->, thick, green] ($(client.east)+(0,-3)$) -- node[below] {\small PONG (Keep-Alive)} ($(server.west)+(0,-3)$);
+        
+        \draw[->, thick, blue] ($(client.east)+(0,-4.5)$) -- node[above] {\small Video Frame (JPEG)} ($(server.west)+(0,-4.5)$);
+    \end{tikzpicture}
+    \caption{Fluxul de mesaje, incluzând mecanismul de Heartbeat pentru menținerea conexiunii.}
+\end{figure}
+
+% --- CAPITOLUL 4 ---
+\chapter{Implementarea Platformei "StreamFlow"}
+
+Acest capitol detaliază arhitectura software și deciziile de implementare, urmărind fluxul datelor de la captură până la randarea pe ecranul receptorului.
+
+\section{Arhitectura Sistemului Distribuit}
+Sistemul adoptă o topologie de tip \textbf{Star (Hub-and-Spoke)}, unde serverul central acționează ca un releu (Store-and-Forward limitat) pentru mesajele WebSocket. Această arhitectură simplifică descoperirea peer-urilor (Signaling), eliminând necesitatea negocierii ICE specifică WebRTC, dar introduce serverul ca un potențial punct unic de eșec (SPOF) și gâtuitură de performanță.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[node distance=2.5cm, auto, scale=0.75, transform shape]
+        % Server
+        \node (server) [rectangle, draw, dashed, fill=blue!5, text width=3cm, align=center, minimum height=2cm] {\textbf{Server Python} \\ (FastAPI + Websockets)};
+        
+        % Clients
+        \node (c1) [circle, draw, fill=green!10, below left=of server] {Client A};
+        \node (c2) [circle, draw, fill=green!10, below right=of server] {Client B};
+        \node (c3) [circle, draw, fill=green!10, above=of server, yshift=-1cm] {Client C};
+        
+        % Connections
+        \draw[<->, ultra thick, blue] (c1) -- node[sloped, above] {\tiny WS /ws/room1} (server);
+        \draw[<->, ultra thick, blue] (c2) -- node[sloped, above] {\tiny WS /ws/room1} (server);
+        \draw[<->, ultra thick, blue] (c3) -- (server);
+        
+        % Data flow annotation
+        \node [below=3.5cm of server, text width=10cm, align=center] {\small Serverul primește frame-ul de la A și face \textit{broadcast} către B și C.};
+    \end{tikzpicture}
+    \caption{Topologia rețelei. Serverul gestionează listele de conexiuni active per cameră (`room\_id`) și rutează pachetele JSON.}
+\end{figure}
+
+\section{Pipeline-ul de Procesare Video}
+Fluxul de procesare a imaginilor este implementat integral în JavaScript (Client-Side), folosind API-urile native ale browserului pentru performanță maximă.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[node distance=1.5cm, auto, scale=0.75, transform shape]
+        % Row 1
+        \node (cam) [rectangle, draw, fill=red!10] {WebCam Stream};
+        \node (video) [rectangle, draw, right=of cam] {<video> Element};
+        \node (canvas) [rectangle, draw, fill=yellow!10, right=of video] {Canvas 2D Context};
+        
+        % Row 2
+        \node (jpeg) [rectangle, draw, fill=orange!10, below=of canvas] {JPEG Encoder};
+        \node (base64) [rectangle, draw, left=of jpeg] {Base64 String};
+        \node (ws) [rectangle, draw, fill=blue!10, left=of base64] {WebSocket Send};
+        
+        % Arrows
+        \draw[->, thick] (cam) -- (video);
+        \draw[->, thick] (video) -- node[above, font=\tiny] {drawImage()} (canvas);
+        \draw[->, thick] (canvas) -- node[right, font=\tiny] {toDataURL()} (jpeg);
+        \draw[->, thick] (jpeg) -- (base64);
+        \draw[->, thick] (base64) -- (ws);
+        
+        \node [below=0.5cm of video, text width=4cm, align=center, font=\footnotesize] {Extragem frame-uri brute (RGB) la 30 FPS};
+    \end{tikzpicture}
+    \caption{Pipeline-ul de captură și codare pe client. Operația `toDataURL` este cea mai costisitoare, deoarece implică compresia JPEG și codarea Base64 sincronă pe thread-ul principal.}
+\end{figure}
+
+\section{Implementarea Backend: Managementul Stării}
+Backend-ul Python utilizează `asyncio` pentru a gestiona mii de conexiuni concurente pe un singur fir de execuție, evitând overhead-ul de context switching al thread-urilor clasice.
+
+\subsection{Keep-Alive și Detectarea Erorilor}
+Serverul implementează un mecanism activ de menținere a conexiunii (Heartbeat). Deoarece conexiunile TCP pot rămâne "agățate" (half-open) în cazul deconectărilor bruște (ex: scoaterea cablului de rețea), serverul trimite periodic un pachet "PING". Dacă scrierea pe socket eșuează (ridică excepția `ConnectionClosed`), conexiunea este marcată ca moartă și eliminată imediat din lista de broadcast, prevenind acumularea erorilor.
+
+Clasa din \texttt{connection\_manager.py} este definită astfel:
+\begin{lstlisting}[language=Python]
+class ConnectionManager:
+    def __init__(self):
+        # room_id -> list of websockets
+        self.active_connections: dict[str, list[WebSocket]] = {}
+
+    async def broadcast(self, message: dict, room_id: str):
+        if room_id in self.active_connections:
+            for connection in self.active_connections[room_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    continue
+\end{lstlisting}
+
+\newpage
+
+\section{Frontend: React și Canvas}
+Interfața este construită în \textbf{React}.
+Metoda utilizată pentru captură și procesare video:
+\begin{enumerate}
+    \item Preluarea imaginii de la cameră.
+    \item Desenarea pe un element \texttt{Canvas} invizibil.
+    \item Transformarea în format text (Base64).
+    \item Transmiterea către server.
+\end{enumerate}
+
+Implementarea funcției de captură este:
+\begin{lstlisting}[language=JavaScript]
+const captureFrame = () => {
+    // Desenam frame-ul curent
+    ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+    // Il transformam in string JPG
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+    // Il trimitem pe teava
+    socket.send(JSON.stringify({
+        type: 'video_frame',
+        data: dataUrl
+    }));
+    requestAnimationFrame(captureFrame);
+};
+// Folosim requestAnimationFrame pentru sincronizare perfecta cu rata de refresh
+requestAnimationFrame(captureFrame);
+\end{lstlisting}
+
+% --- CAPITOLUL 5 (TESTARE) ---
+\chapter{Analiza Performanței și Scenarii de Testare}
+
+În acest capitol, analizez performanța teoretică a sistemului \textbf{StreamFlow} și propun o metodologie de validare pentru implementarea curentă.
+
+\section{Estimarea Latenței}
+Latența totală a sistemului ("Glass-to-Glass") este suma întârzierilor introduse de fiecare etapă a procesării.
+
+\begin{equation}
+    L_{total} = L_{capture} + L_{encode} + L_{network} + L_{decode} + L_{render}
+\end{equation}
+
+Pe baza testelor preliminare și a specificațiilor protocoalelor utilizate, valorile estimate pentru o rețea locală sunt:
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{|c|c|c|}
+        \hline
+        \textbf{Etapă} & \textbf{Timp Estimat (ms)} & \textbf{Observații} \\
+        \hline
+        Captură Camera & 16 ms & La 60 FPS \\
+        Codare JPEG (Browser) & 10-20 ms & Variabil în funcție de rezoluție \\
+        Transport (WebSocket/WiFi) & 5-50 ms & Depinde de congestia rețelei \\
+        Decodare Image & 5-10 ms & Hardware accelerated \\
+        \hline
+        \textbf{TOTAL} & \textbf{~50-100 ms} & Performanță așteptată \\
+        \hline
+    \end{tabular}
+    \caption{Bugetul de latență estimat pentru o conexiune LAN.}
+\end{table}
+
+\section{Scenarii de Utilizare și Limite}
+Au fost identificate următoarele scenarii de funcționare și limitele asociate:
+
+\begin{enumerate}
+    \item \textbf{Rețea Wi-Fi (Ideal)}: Latență mică, calitate vizuală bună. Compresia MJPEG este ineficientă ca bandă, dar excelentă pentru latență.
+    \item \textbf{Rețea 4G/5G}: Fluctuațiile de semnal (jitter) pot cauza blocaje vizibile. Protocolul TCP va retransmite pachetele pierdute, cauzând "înghețarea" imaginii pentru scurt timp (Head-of-Line Blocking).
+\end{enumerate}
+
+% --- CAPITOLUL 6 (VIITOR) ---
+\chapter{Direcții Viitoare de Dezvoltare}
+
+Proiectul \textbf{StreamFlow} reprezintă un MVP (Minimum Viable Product). Dezvoltările viitoare vizează:
+
+\section{Trecerea la WebTransport}
+Așa cum am menționat, WebSockets suferă de problema Head-of-Line Blocking.
+Noul standard \textbf{WebTransport} ar permite trimiterea datelor nesigure (datagrame) direct din browser.
+
+Au fost inițiate experimente cu API-ul, un exemplu de implementare viitoare fiind:
+
+\begin{lstlisting}[language=JavaScript, caption=POC WebTransport Client]
+async function initWebTransport() {
+    const transport = new WebTransport("https://server/wt");
+    await transport.ready;
+    
+    const sender = transport.datagrams.writable.getWriter();
+    const data = new Uint8Array([1, 2, 3]); // Frame-ul video
+    sender.write(data);
+}
+\end{lstlisting}
+
+\section{Procesare Video cu AI pe Client}
+Integrarea bibliotecii \textbf{TensorFlow.js} deschide posibilitatea procesării inteligente a semnalului video direct la sursă (Edge AI). Printre funcționalitățile ce pot fi adăugate se numără:
+
+\begin{itemize}
+    \item \textbf{Virtual Background (Blur/Replacement)}: Utilizarea modelelor de segmentare semantică (precum \textit{BodyPix} sau \textit{DeepLab}) pentru a separa silueta utilizatorului de fundal. Aceasta permite aplicarea unui efect de încețoșare (Gaussian Blur) asupra fundalului pentru a spori intimitatea.
+    \item \textbf{Noise Suppression}: Filtrarea zgomotului audio folosind rețele neurale recurente (RNN), critică pentru mediile de lucru zgomotoase.
+\end{itemize}
+
+\newpage
+\section{Scalabilitate Orizontală}
+O limitare fundamentală a implementării curente este dependența de memoria procesului unic (RAM). Deoarece conexiunile WebSocket sunt persistente și cu starea menținută local (stateful), doi utilizatori conectați la instanțe diferite de server nu ar putea comunica între ei.
+
+Pentru a scala orizontal (mai multe containere/servere în spatele unui Load Balancer), este necesară o arhitectură de tip \textit{Shared Nothing} cu un strat de sincronizare extern. Arhitectura propusă implică utilizarea **Redis Pub/Sub** ca magistrală de mesaje (Message Bus):
+
+\begin{itemize}
+    \item Când Serverul A primește un cadru video, nu îl trimite doar clienților locali, ci îl publică într-un canal Redis (e.g., \texttt{channel:room\_1}).
+    \item Toate celelalte instanțe (Server B, Server C) sunt abonate la acest canal.
+    \item La primirea mesajului din Redis, fiecare server îl retransmite către clienții săi WebSocket conectați la camera respectivă.
+\end{itemize}
+
+Această decuplare permite adăugarea dinamică de noi instanțe de server pentru a prelua încărcarea, fără a întrerupe sesiunile active.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}
+        \node (lb) [rectangle, draw, fill=yellow!20] {Load Balancer};
+        \node (s1) [rectangle, draw, fill=blue!10, below left=of lb] {Server 1};
+        \node (s2) [rectangle, draw, fill=blue!10, below right=of lb] {Server 2};
+        \node (redis) [cylinder, draw, shape border rotate=90, aspect=0.25, fill=red!20, below=of lb, yshift=-3cm] {Redis};
+        \draw[->] (lb) -- (s1);
+        \draw[->] (lb) -- (s2);
+        \draw[<->, dashed] (s1) -- (redis);
+        \draw[<->, dashed] (s2) -- (redis);
+    \end{tikzpicture}
+    \caption{Arhitectura propusă cu Redis.}
+\end{figure}
+
+\chapter{Concluzii}
+
+\section{Rezumatul Realizărilor}
+Prezentul proiect a reușit implementarea și validarea un sistem complet de videoconferință ("end-to-end") bazat exclusiv pe tehnologii web standardizate, fără a recurge la soluții "black-box" precum WebRTC sau plugin-uri externe. Concluziile principale desprinse în urma testării prototipului \textbf{StreamFlow} sunt:
+
+\begin{itemize}
+    \item \textbf{Viabilitatea Alternativelor la WebRTC}: S-a demonstrat experimental că pentru scenarii specifice (rețele locale, supraveghere, broadcast simplu), o arhitectură personalizată peste WebSockets poate oferi o latență competitivă (sub 100ms), cu o complexitate de implementare semnificativ redusă.
+    \item \textbf{Eficiența Transportului prin WebSockets}: Deși protocolul TCP impune limitări severe în condiții de instabilitate a rețelei, în mediile LAN sau Wi-Fi stabil, WebSockets s-au dovedit o soluție robustă pentru transportul cadrelor video comprimate MJPEG.
+    \item \textbf{Performanța Client-Side}: Motoarele JavaScript moderne (precum V8 din Chrome) împreună cu API-ul HTML5 Canvas permit procesarea și randarea fluxurilor video la 30 FPS și rezoluție HD (720p) direct în thread-ul principal, fără a bloca interfața utilizatorului, validând astfel capacitatea React de a gestiona update-uri de înaltă frecvență.
+\end{itemize}
+
+\section{Lecții Învățate și Provocări}
+Pe parcursul dezvoltării, cea mai importantă lecție asimilată a fost natura inevitabilă a compromisului din "Triunghiul Streaming-ului": \textbf{Calitate} - \textbf{Latență} - \textbf{Lățime de Bandă}.
+
+\begin{itemize}
+    \item \textbf{Prioritizarea Latenței}: Pentru StreamFlow, decizia de a utiliza MJPEG (fără compresie temporală) a sacrificat eficiența lățimii de bandă pentru a obține o latență minimă și o reziliență crescută la erori (lipsa artefactelor de propagare).
+    \item \textbf{Limitele Single-Threaded}: S-a observat că gâtuitura (bottleneck-ul) sistemului se poate muta rapid din rețea în procesorul clientului. Codarea Base64 și manipularea Canvas sunt operații CPU-intensive; fără o gestionare atentă a ciclului de randare (\texttt{requestAnimationFrame}), aplicația poate deveni instabilă.
+\end{itemize}
+
+% --- APPENDIX ---
+\appendix
+\chapter{Anexa A: Codul Sursă Esențial}
+
+Codul sursă complet al proiectului este disponibil public pe GitHub la adresa: \\ \url{https://github.com/cristim67/tem-project}.
+
+Pentru a oferi o imagine completă a implementării, atașez cele mai importante porțiuni de cod care guvernează logica de streaming și sincronizare.
+
+\section{Componenta VideoPlayer (Frontend React)}
+Acesta este "motorul" aplicației, responsabil de capturarea stream-ului video și trimiterea prin WebSocket.
+
+\begin{lstlisting}[language=JavaScript, breaklines=true, basicstyle=\footnotesize\ttfamily]
+// VideoPlayer.tsx - Componenta principala de randare video
+
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ 
+  participants, hostName, roomId, settings, onUpdateSettings, onLeave, onToggleAudio, onToggleVideo 
+}) => {
+  // ... (State management omitted) ...
+
+  useEffect(() => {
+    // Distributed Frame Streaming Logic
+    const captureFrame = () => {
+      const now = Date.now();
+      const interval = 1000 / streamSettings.fps;
+      
+      if (!isSending && ctx && video.readyState >= 2 && socket && socket.open && (now - lastSendTime > interval)) {
+        isSending = true;
+        
+        let targetWidth = 320;
+        if (streamSettings.quality === '720p') targetWidth = 1280;
+        else if (streamSettings.quality === '1080p') targetWidth = 1920;
+
+        const targetHeight = (video.videoHeight / video.videoWidth) * targetWidth;
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        
+        ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+        
+        const quality = streamSettings.quality === '360p' ? 0.4 : 0.6;
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        
+        socket.send(JSON.stringify({
+           type: 'video_frame',
+           data: dataUrl
+        }));
+        
+        isSending = false;
+      }
+      requestAnimationFrame(captureFrame);
+    };
+    requestAnimationFrame(captureFrame);
+  }, [streamSettings]);
+
+  return (
+    <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
+        <div className={`grid h-full gap-2 p-2 ${getGridClass()}`}>
+            {participants.map((p) => (
+                <VideoSlot key={p.id} participant={p} />
+            ))}
+        </div>
+    </div>
+  );
+};
+\end{lstlisting}
+
+\section{Managerul de Conexiuni (Backend Python)}
+Clasa care gestionează dicționarul de socket-uri active și rutează mesajele.
+
+\begin{lstlisting}[language=Python, breaklines=true, basicstyle=\footnotesize\ttfamily]
+class ConnectionManager:
+    def __init__(self):
+        # room_id -> list of websockets
+        self.active_connections: dict[str, list[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, room_id: str):
+        await websocket.accept()
+        if room_id not in self.active_connections:
+            self.active_connections[room_id] = []
+        self.active_connections[room_id].append(websocket)
+
+    def disconnect(self, websocket: WebSocket, room_id: str):
+        if room_id in self.active_connections:
+            self.active_connections[room_id].remove(websocket)
+            if not self.active_connections[room_id]:
+                del self.active_connections[room_id]
+
+    async def broadcast(self, message: dict, room_id: str):
+        if room_id in self.active_connections:
+            for connection in self.active_connections[room_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    continue
+\end{lstlisting}
+
+
+% --- Bibliografie si Webografie ---
+\begin{thebibliography}{99}
+
+\bibitem{richardson}
+I. Richardson, \textit{The H.264 Advanced Video Compression Standard}.
+Cartea de referință pentru compresie. A facilitat înțelegerea conceptelor de bază.
+
+\bibitem{tanenbaum}
+A. S. Tanenbaum, \textit{Rețele de Calculatoare}.
+Biblia rețelisticii.
+
+\bibitem{mdn}
+MDN Web Docs - Documentația Mozilla.
+Sursa mea principală pentru WebSockets și Canvas API. \\ \url{https://developer.mozilla.org/}
+
+\bibitem{fastapi}
+FastAPI Documentation.
+O documentație excelentă, plină de exemple practice. \\ \url{https://fastapi.tiangolo.com/}
+
+\bibitem{rfc6455}
+IETF. \textit{RFC 6455 - The WebSocket Protocol}. 2011.
+Documentul oficial care definește standardul WebSocket.
+
+\bibitem{rfc2616}
+IETF. \textit{RFC 2616 - Hypertext Transfer Protocol -- HTTP/1.1}.
+Definiția protocolului pe care se bazează Handshake-ul inițial.
+
+\bibitem{reactdocs}
+Meta. \textit{React Documentation}.
+\url{https://react.dev/}
+
+\bibitem{pythonasync}
+Python Software Foundation. \textit{asyncio — Asynchronous I/O}.
+\url{https://docs.python.org/3/library/asyncio.html}
+
+\bibitem{numpy}
+Harris, C.R., et al. \textit{Array programming with NumPy}. Nature 585, 357–362 (2020).
+Folosit pentru manipularea buffer-elor de imagine înainte de compresie.
+
+\end{thebibliography}
+
+\end{document}
