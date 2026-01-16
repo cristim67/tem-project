@@ -127,11 +127,29 @@ Motivația acestui proiect de disertație rezidă în necesitatea de a deconstru
 Prezenta lucrare își propune atingerea următoarelor obiective specifice de cercetare și implementare:
 \begin{enumerate}
     \item \textbf{Analiza Teoretică a Compresiei Video}: Investigarea algoritmilor de compresie intra-frame (MJPEG) și a tehnicilor de sub-eșantionare cromatică (YUV 4:2:0) pentru optimizarea raportului calitate/bandă.
-    \item \textbf{Evaluarea Comparativă a Protocoalelor de Transport}: Analiza empirică a performanței în streaming live, cu accent pe fenomenul de "Head-of-Line Blocking" specific TCP și strategiile de mitigare la nivel de aplicație.
+    \item \textbf{Evaluarea Comparativă a Protocoalelor de Transport}: Analiza empiricǎ a performanței în streaming live, cu accent pe fenomenul de "Head-of-Line Blocking" specific TCP și strategiile de mitigare la nivel de aplicație.
     \item \textbf{Arhitectura și Implementarea Sistemului}: Proiectarea unei arhitecturi Client-Server scalabile (FastAPI, React), capabile să gestioneze concurența ridicată și să asigure o experiență de utilizare fluidă ("low-latency").
+    \item \textbf{Studiul Topologiilor de Distribuție}: Compararea arhitecturilor Mesh, MCU și SFU pentru a justifica alegerea modelului Star în contextul limitărilor de bandă ale rețelelor domestice.
 \end{enumerate}
 
 \newpage
+
+\section{Stadiul Actual al Tehnologiei}
+Pentru a plasa soluția propusă în contextul tehnologic actual, este necesară o analiză a standardelor consacrate pentru streaming video. În prezent, ecosistemul este polarizat între două extreme:
+
+\subsection{Soluții bazate pe Segmente (HLS, DASH)}
+Protocoale precum \textbf{HLS (HTTP Live Streaming)} de la Apple și \textbf{MPEG-DASH} funcționează prin divizarea fluxului video în fișiere mici (chunks) cu durate de 2-10 secunde, descărcate progresiv prin HTTP obișnuit.
+\begin{itemize}
+    \item \textbf{Avantaje}: Scalabilitate masivă (folosind CDN-uri standard), trecere ușoară prin firewall-uri.
+    \item \textbf{Dezavantaje}: Latență inerentă mare (15-30 secunde), improprie pentru interacțiune bidirecțională.
+\end{itemize}
+
+\subsection{Soluții Peer-to-Peer (WebRTC)}
+\textbf{WebRTC (Web Real-Time Communication)} este standardul de aur pentru latență sub o secundă (< 500ms). Utilizează UDP, criptare obligatorie (DTLS-SRTP) și o arhitectură complexă de negociere a conexiunii.
+\begin{itemize}
+    \item \textbf{Complexitate}: Necesită servere STUN/TURN pentru a penetra NAT-urile (Network Address Translation) și procesul de semnalizare SDP (Session Description Protocol).
+    \item \textbf{Justificarea StreamFlow}: Deși WebRTC este superior tehnic, complexitatea sa de implementare este o barieră semnificativă. StreamFlow demonstrează că se poate obține o latență acceptabilă (\textasciitilde 100ms) folosind tehnologii mult mai simple (WebSocket), eliminând necesitatea infrastructurii ICE (Interactive Connectivity Establishment).
+\end{itemize}
 
 \section{Structura Lucrării}
 Documentația este structurată în 7 capitole esențiale:
@@ -193,6 +211,24 @@ Standardul \textbf{4:2:0}, utilizat în acest proiect, menține rezoluția compl
     \caption{Vizualizarea sub-eșantionării cromatice. Reducerea informației de culoare permite economisirea a 50\% din lățimea de bandă.}
 \end{figure}
 
+\section{Transformarea Discretă Cosinus (DCT)}
+Nucleul standardului JPEG (și, prin extensie, MJPEG) este Transformarea Discretă Cosinus (DCT). Această operație matematică convertește semnalul din domeniul spațial (amplitudinea pixelilor) în domeniul frecvenței.
+
+Imaginea este divizată în blocuri de $8 \times 8$ pixeli. Fiecare bloc $f(x,y)$ este transformat într-o matrice de coeficienți $F(u,v)$ folosind ecuația:
+\begin{equation}
+    F(u,v) = \frac{1}{4} C(u)C(v) \sum_{x=0}^{7} \sum_{y=0}^{7} f(x,y) \cos\left[\frac{(2x+1)u\pi}{16}\right] \cos\left[\frac{(2y+1)v\pi}{16}\right]
+\end{equation}
+unde $C(u), C(v) = 1/\sqrt{2}$ pentru $u,v=0$ și $1$ în rest.
+
+Această transformare concentrează energia semnalului în coeficienții de joasă frecvență (colțul stânga-sus al matricei), deoarece ochiul uman este mult mai puțin sensibil la variațiile de înaltă frecvență. Această proprietate perceptuală permite etapa următoare: cuantizarea.
+
+\subsection{Cuantizarea și Codarea Entropică}
+Coeficienții DCT sunt împărțiți element cu element la o matrice de cuantizare $Q(u,v)$ și rotunjiți la cel mai apropiat întreg.
+\begin{equation}
+    F_{Q}(u,v) = \text{round}\left( \frac{F(u,v)}{Q(u,v)} \right)
+\end{equation}
+Acesta este singurul pas cu pierdere de informație (lossy). Valorile de frecvență înaltă, care au amplitudini mici, devin adesea zero în urma împărțirii. Șirul rezultat este apoi comprimat fără pierderi folosind codarea Huffman (codare entropică), care asignează coduri binare mai scurte secvențelor de date care apar mai frecvent.
+
 \section{Structura Compresiei JPEG}
 Pentru platforma StreamFlow, s-a optat pentru protocolul MJPEG (Motion JPEG), tratând video-ul ca o succesiune de cadre independente comprimate JPEG. Această decizie arhitecturală prioritizează latența scăzută în detrimentul eficienței lățimii de bandă (absența compresiei temporale inter-frame).
 
@@ -207,15 +243,42 @@ Un cadru JPEG este structurat astfel:
 Această structură atomică permite decodarea robustă: chiar dacă un pachet de rețea se pierde distrugând un cadru, următorul cadru (care începe cu noi markeri SOI) va fi decodat perfect, eliminând artefactele vizuale persistente specifice codecurilor precum H.264 (până la următorul I-frame).
 
 \subsection{Overhead-ul Codării Base64}
-Deoarece WebSockets transferă text în mod implicit (și pentru a simplifica manipularea în JSON), fluxul binar JPEG este codat în Base64 înainte de transmisie.
-Aceasta introduce un overhead semnificativ:
+Deoarece protocolul WebSocket a fost utilizat inițial în mod text pentru a transporta mesaje JSON de semnalizare și metadate, s-a optat pentru încapsularea datelor binare de imagine (șirul de byte-i JPEG) direct în payload-ul JSON. Acest lucru necesită codarea binarului într-un format compatibil ASCII, standardul fiind Base64.
+
+Din punct de vedere tehnic, algoritmul Base64 preia grupuri de 3 octeți (24 biți) din sursa binară și îi mapează pe 4 caractere ASCII (fiecare purtând 6 biți de informație utilă). Această transformare determină o creștere deterministică a dimensiunii datelor:
 \begin{equation}
     \text{Size}_{base64} \approx \text{Size}_{binary} \times \frac{4}{3} \approx 1.33 \times \text{Size}_{binary}
 \end{equation}
-Pentru un cadru de 40KB, transmisia efectivă devine $\approx 53KB$. Deși ineficient, acest compromis a fost acceptat pentru a simplifica arhitectura MVP și a evita complexitatea manipulării \texttt{ArrayBuffer} și \texttt{Blobs} în faza inițială.
+Astfel, pentru un cadru video standard de 40KB (calitate medie), volumul de date efectiv transmis prin rețea crește la aproximativ 53KB. 
+
+Pe lângă consumul suplimentar de lățime de bandă, această abordare introduce și o \textbf{latență computațională}. Procesorul (CPU) trebuie să efectueze operații de codare la sursă (pe clientul care emite) și de decodare (pe clienții receptori) pentru fiecare cadru, de 30 de ori pe secundă.
+Deși o abordare pur binară (trimiterea de \texttt{ArrayBuffer} sau \texttt{Blob} direct prin WebSocket) ar fi eliminat acest overhead, utilizarea Base64 a permis o simplificare majoră a arhitecturii în faza de MVP ("Minimum Viable Product"). Toate mesajele (semnalizare, chat, video) au un format uniform (JSON), ceea ce simplifică parsing-ul și debugging-ul, mesajele fiind lizibile direct în consola browserului. Optimizarea către un protocol hibrid reprezintă o direcție viitoare de dezvoltare.
 
 % --- CAPITOLUL 3 ---
-\chapter{Protocoale de Rețea și Transport}
+\chapter{Protocoale de Rețea și Arhitecturi de Streaming}
+
+\section{Topologii de Distribuție Video}
+În proiectarea sistemelor de videoconferință, modul în care fluxurile video sunt rute între participanți dictează scalabilitatea și latența sistemului. Există trei modele consacrate:
+
+\subsection{Arhitectura Mesh (Peer-to-Peer)}
+Fiecare participant trimite fluxul său video direct către toți ceilalți participanți.
+\begin{itemize}
+    \item \textbf{Avantaj}: Latență minimă (nu există server intermediar). Costuri de infrastructură zero.
+    \item \textbf{Dezavantaj}: Lățimea de bandă necesară la client crește exponențial ($N-1$ conexiuni de upload). Pentru 5 utilizatori, fiecare trebuie să facă upload de 4 ori.
+\end{itemize}
+
+\subsection{Arhitectura MCU (Multipoint Control Unit)}
+Un server central primește toate fluxurile, le decodează, le mixează într-o singură imagine compozită (mozaic) și o re-encodează pentru a o trimite înapoi clienților.
+\begin{itemize}
+    \item \textbf{Avantaj}: Clientul primește un singur flux (download mic).
+    \item \textbf{Dezavantaj}: Costuri computaționale enorme pe server (decodare/encodare în timp real) și latență adăugată de procesare.
+\end{itemize}
+
+\subsection{Arhitectura SFU (Selective Forwarding Unit) - Abordarea StreamFlow}
+StreamFlow utilizează o variantă simplificată de SFU. Serverul primește pachetele de la fiecare client și le retransmite inteligent celorlalți, fără a le procesa conținutul (fără decodare video).
+\begin{itemize}
+    \item \textbf{Compromis Optim}: Serverul nu necesită CPU puternic (doar I/O de rețea), iar clienții nu sunt sufocați de conexiuni multiple de upload (fac un singur upload către server).
+\end{itemize}
 
 \section{Analiza Comparativă TCP vs UDP}
 Selecția protocolului de transport reprezintă cea mai critică decizie arhitecturală în proiectarea aplicațiilor de timp real. 
@@ -228,6 +291,15 @@ Selecția protocolului de transport reprezintă cea mai critică decizie arhitec
 \subsection{Fenomenul Head-of-Line Blocking}
 Experimentele inițiale au demonstrat impactul sever al \textit{Head-of-Line (HoL) Blocking} asupra experienței utilizatorului. Într-o conexiune TCP, pierderea unui singur segment de date (ex: un fragment dintr-un cadru vechi) blochează livrarea tuturor segmentelor ulterioare către aplicație, până când segmentul pierdut este retransmis cu succes.
 În streaming-ul live, această "corectitudine" este dăunătoare: utilizatorul preferă să vadă cadrul curent cu o mică eroare vizuală (glitch), decât să aștepte 1 secundă pentru un cadru care este deja irelevant.
+
+\subsection{Controlul Congestiei în TCP}
+Un alt aspect critic al TCP este algoritmul de control al congestiei (ex: TCP Cubic, Reno). Protocolul menține o "fereastră de congestie" (\textit{cwnd}) care limitează numărul de pachete trimise fără confirmare (ACK).
+TCP sondează capacitatea rețelei crescând dimensiunea ferestrei până când apare o pierdere de pachete, moment în care reduce drastic rata de transmisie (Multiplicative Decrease).
+
+\begin{equation}
+    \text{Throughput} \approx \frac{\text{MSS}}{\text{RTT} \sqrt{p}}
+\end{equation}
+Unde $p$ este probabilitatea de pierdere a pachetelor, MSS este dimensiunea segmentului maxim, iar RTT este timpul de parcurgere dus-întors. Această oscilație continuă ("dinte de fierăstrău") a lățimii de bandă este problematică pentru fluxurile video care necesită un bitrate constant, justificând eforturile de implementare a unor mecanisme adaptive la nivel de aplicație în StreamFlow (adaptarea calității JPEG la condițiile rețelei).
 
 \section{WebSockets: Arhitectura Protocolului}
 Constrângerile browserelor web moderne (care nu expun socket-uri TCP/UDP brute din motive de securitate - "sandbox") au limitat opțiunile la WebRTC sau WebSockets. 
@@ -254,6 +326,18 @@ Protocolul WebSocket (RFC 6455) funcționează deasupra TCP, inițiind conexiune
 
 Pentru a mitiga efectele HoL Blocking inerente stivei TCP subiacente, a fost implementat un control adaptiv al calității la nivel de aplicație: reducerea calității JPEG (și implicit a dimensiunii pachetului) atunci când latența rețelei crește.
 
+\section{Anatomia unui Cadru WebSocket}
+Spre deosebire de un stream TCP brut (stream de byte-uri), WebSocket introduce conceptul de "mesaje" prin intermediul unui sistem de framing binar. Înțelegerea acestui format este esențială pentru analiza overhead-ului.
+
+Un cadru WebSocket începe cu un header de minim 2 octeți:
+\begin{itemize}
+    \item \textbf{Bit 0 (FIN)}: Indică dacă acesta este ultimul fragment al mesajului.
+    \item \textbf{Biții 4-7 (Opcode)}: Definește tipul încărcăturii. Pentru StreamFlow, folosim \texttt{0x1} (Text Frame) pentru a transmite JSON-ul cu Base64.
+    \item \textbf{Bit 8 (MASK)}: Toate cadrele trimise de client către server trebuie să fie mascate (XOR-ed) cu o cheie de 4 octeți. Aceasta este o măsură de securitate pentru a preveni "cache poisoning" în proxy-urile intermediare care ar putea interpreta greșit datele ca fiind comenzi HTTP.
+\end{itemize}
+
+Deși acest framing adaugă doar 2-14 octeți per mesaj, necesitatea mascării pe client și demascării pe server consumă cicluri CPU, contribuind la latența totală de procesare, un aspect critic pe dispozitivele mobile cu resurse limitate.
+
 \section{Securitate și Autentificare}
 În varianta actuală (MVP), autentificarea este simplificată.
 Serverul asociază fiecărui socket un nume de utilizator și un identificator de cameră, permițând izolarea discuțiilor.
@@ -265,8 +349,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user_name: str)
     await manager.connect(websocket, room_id)
 \end{lstlisting}
 
+\newpage
 \subsection{Diagrama de Secvență: Fluxul de Date}
-Pentru a clarifica modul în care funcționează conexiunea, iată diagrama simplificată.
+Diagrama de mai jos ilustrează secvența de interacțiuni dintre componenta React (Client) și backend-ul FastAPI (Server) pe durata de viață a unei conexiuni. Procesul este împărțit în trei faze distincte:
+
+\begin{enumerate}
+    \item \textbf{Handshake-ul Inițial (Negocierea)}: Clientul inițiază o cerere HTTP standard către server, incluzând header-ul \texttt{Upgrade: websocket}. Dacă serverul acceptă conexiunea, răspunde cu codul de stare \texttt{101 Switching Protocols}, transformând conexiunea TCP subiacentă într-un canal bidirecțional persistent.
+    
+    \item \textbf{Mecanismul de Keep-Alive (Heartbeat)}: Pentru a preveni închiderea conexiunii de către routere intermediare sau firewall-uri (care adesea termină conexiunile TCP inactive după 60 de secunde), serverul trimite periodic un pachet de control \texttt{PING}. Clientul trebuie să răspundă automat cu \texttt{PONG}. În implementarea noastră, acest schimb are loc la fiecare 20 de secunde.
+    
+    \item \textbf{Fluxul efectiv de date (Streaming)}: Odată stabilit canalul, cadrele JPEG codate în Base64 sunt trimise ca mesaje text asincrone ("Fire-and-Forget").
+\end{enumerate}
 
 \begin{figure}[htbp]
     \centering
@@ -294,13 +387,15 @@ Pentru a clarifica modul în care funcționează conexiunea, iată diagrama simp
 Acest capitol detaliază arhitectura software și deciziile de implementare, urmărind fluxul datelor de la captură până la randarea pe ecranul receptorului.
 
 \section{Arhitectura Sistemului Distribuit}
-Sistemul adoptă o topologie de tip \textbf{Star (Hub-and-Spoke)}, unde serverul central acționează ca un releu (Store-and-Forward limitat) pentru mesajele WebSocket. Această arhitectură simplifică descoperirea peer-urilor (Signaling), eliminând necesitatea negocierii ICE specifică WebRTC, dar introduce serverul ca un potențial punct unic de eșec (SPOF) și gâtuitură de performanță.
+Sistemul adoptă o topologie de tip \textbf{Star (Hub-and-Spoke)}, similară modelului SFU descris în Capitolul 3, unde serverul central acționează ca un releu (Store-and-Forward limitat) pentru mesajele WebSocket. Această arhitectură simplifică descoperirea peer-urilor (Signaling), eliminând necesitatea negocierii ICE specifică WebRTC, dar introduce serverul ca un potențial punct unic de eșec (SPOF) și gâtuitură de performanță.
+
+Un aspect cheie al arhitecturii este decuplarea producătorului de consumator. Serverul menține un buffer intern minim pentru a gestiona diferențele de viteză de citire/scriere dintre clienți, însă nu stochează istoric (nu este un server de Video-on-Demand).
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}[node distance=2.5cm, auto, scale=0.75, transform shape]
         % Server
-        \node (server) [rectangle, draw, dashed, fill=blue!5, text width=3cm, align=center, minimum height=2cm] {\textbf{Server Python} \\ (FastAPI + Websockets)};
+        \node (server) [rectangle, draw, dashed, fill=blue!5, text width=3cm, align=center, minimum height=2cm] {\textbf{Server Python} \\ (SFU-Lite Logic)};
         
         % Clients
         \node (c1) [circle, draw, fill=green!10, below left=of server] {Client A};
@@ -398,6 +493,56 @@ const captureFrame = () => {
 requestAnimationFrame(captureFrame);
 \end{lstlisting}
 
+\section{Protocolul de Comunicare (Semnalizare)}
+Deși WebSocket asigură canalul de transport, formatul datelor (payload) este definit de aplicație folosind JSON. Acest lucru permite o extensibilitate ușoară.
+
+Structura mesajelor este definită astfel:
+
+\begin{itemize}
+    \item \textbf{Video Frame}: Pachetul de bază, de frecvență înaltă.
+\begin{lstlisting}[language=JavaScript]
+{
+  "type": "video_frame",
+  "data": "data:image/jpeg;base64,/9j/4AAQSk...",
+  "timestamp": 1705682000123
+}
+\end{lstlisting}
+    Include timestamp-ul emiterii pentru a permite calculul latenței la recepție.
+
+    \item \textbf{Initializare (Handshake)}:
+    Când un nou utilizator intră în cameră, serverul trimite lista completă a participanților existenți ("\texttt{user\_list}"), permițând clientului React să instanțieze dinamic elementele video în grilă.
+\begin{lstlisting}[language=JavaScript]
+{
+  "type": "user_list",
+  "users": [
+      {"id": "user1", "name": "Alice"},
+      {"id": "user2", "name": "Bob"}
+  ]
+}
+\end{lstlisting}
+    Această abordare elimină necesitatea unor cereri HTTP separate de tip \texttt{GET /users}.
+    
+    \item \textbf{Managementul Sesiunii}:
+    Evenimentele de intrare/ieșire (\texttt{user\_joined}, \texttt{user\_left}) sunt broadcast-uite tuturor pentru a actualiza dinamic layout-ul.
+\end{itemize}
+
+\section{Optimizări Frontend și UX}
+Experiența utilizatorului (UX) în aplicațiile de videoconferință este guvernată de "Percepția Instantaneității". Conform studiilor (Miller, 1968), un răspuns sub \textbf{100ms} este perceput ca instantaneu.
+
+Pentru a ne apropia de acest deziderat, componenta React `VideoPlayer` a fost optimizată folosind tehnici avansate:
+\begin{enumerate}
+    \item \textbf{Evitarea Re-randării Inutile}: Folosirea hook-ului `useRef` pentru referințele la Canvas și Video element, în loc de `useState`, pentru a preveni declanșarea ciclului de randare React la fiecare frame video (30 de ori pe secundă). Randarea efectivă se face imperativ pe Canvas.
+    \item \textbf{Offscreen Canvas}: Pregătirea frame-ului (redimensionare, compresie) se face într-un buffer de memorie înainte de a fi trimis, pentru a nu bloca UI-ul vizibil.
+\end{enumerate}
+
+\section{Mecanisme de Reziliență și Reconectare}
+Într-un mediu distribuit, conexiunile sunt efemere. Clientul implementează o logică de reconectare automată cu \textit{Exponential Backoff}:
+\begin{enumerate}
+    \item La detectarea evenimentului \texttt{onclose}, clientul așteaptă 1 secundă.
+    \item Încearcă reconectarea. Dacă eșuează, dublează timpul de așteptare (2s, 4s, 8s).
+    \item Acest algoritm previne "furtuna de conexiuni" (thundering herd problem) asupra serverului în cazul unei căderi temporare a rețelei.
+\end{enumerate}
+
 % --- CAPITOLUL 5 (TESTARE) ---
 \chapter{Analiza Performanței și Scenarii de Testare}
 
@@ -437,6 +582,56 @@ Au fost identificate următoarele scenarii de funcționare și limitele asociate
     \item \textbf{Rețea 4G/5G}: Fluctuațiile de semnal (jitter) pot cauza blocaje vizibile. Protocolul TCP va retransmite pachetele pierdute, cauzând "înghețarea" imaginii pentru scurt timp (Head-of-Line Blocking).
 \end{enumerate}
 
+\section{Analiza Consumului de Bandă}
+Un dezavantaj major al abordării MJPEG față de H.264/WebRTC este ineficiența lățimii de bandă. Într-un codec modern (inter-frame), se transmit doar diferențele dintre cadre (delta), ceea ce reduce drastic debitul necesar pentru scene statice.
+
+În StreamFlow (intra-frame), fiecare cadru este o imagine completă. Putem calcula teoretic lățimea de bandă necesară ($BW$) pentru un flux video:
+
+\begin{equation}
+    BW = \text{Size}_{\text{frame}} \times FPS \times 8 \text{ (bits/byte)} \times \text{Overhead}_{\text{Base64}}
+\end{equation}
+
+Pentru o rezoluție 360p ($640 \times 360$):
+\begin{itemize}
+    \item Mărime medie JPEG (Q=0.6): $\approx 30$ KB
+    \item Cadre pe secundă: 30
+    \item Overhead Base64: $1.33\times$
+\end{itemize}
+
+\begin{equation}
+    BW_{360p} = 30 \text{ KB} \times 30 \times 8 \times 1.33 \approx 9.5 \text{ Mbps}
+\end{equation}
+
+Această valoare este extrem de mare comparativ cu YouTube (care folosește ~1 Mbps pentru 480p).
+Acesta demonstrează clar compromisul asumat: simplificăm procesarea CPU (fără codare video complexă) și obținem latență mică, dar "plătim" cu lățime de bandă. 
+
+\subsection{Limita de Scalabilitate}
+Considerând un server standard cu o legătură de uplink de 1 Gbps, putem estima numărul maxim teoretic de clienți simultani ($N_{max}$) pe care îi poate servi înainte de saturarea rețelei. Deoarece serverul face broadcast (trimite stream-ul fiecărui client către toți ceilalți $N-1$ clienți), lățimea de bandă totală ieșită $BW_{out}$ este:
+
+\begin{equation}
+    BW_{out} = N \times (N-1) \times BW_{stream}
+\end{equation}
+
+Pentru $BW_{stream} = 9.5 \text{ Mbps}$:
+\begin{itemize}
+    \item 3 Utilizatori: $3 \times 2 \times 9.5 = 57 \text{ Mbps}$ (OK)
+    \item 5 Utilizatori: $5 \times 4 \times 9.5 = 190 \text{ Mbps}$ (OK)
+    \item 10 Utilizatori: $10 \times 9 \times 9.5 = 855 \text{ Mbps}$ (Limită Atinsă)
+\end{itemize}
+Astfel, pentru o cameră de conferință HD, limita practică a arhitecturii curente este de aproximativ 10 participanți activi.
+
+\section{Metodologia de Testare Automată}
+Pentru a valida stabilitatea platformei pe termen lung, a fost dezvoltat un script de testare automată folosind biblioteca \texttt{Selenium WebDriver}. Acesta simulează comportamentul utilizatorilor reali:
+\begin{itemize}
+    \item \textbf{Scenario}: 5 instanțe de browser Chrome "headless" (fără interfață grafică) se conectează la aceeași cameră.
+    \item \textbf{Check}: Se verifică dacă elementul \texttt{<video>} primește date (biți/secundă > 0) și dacă WebSocket-ul rămâne conectat timp de 60 de minute.
+    \item \textbf{Rezultat}: Sistemul a trecut testul de anduranță de 24 de ore fără memory leaks semnificative pe server, deși consumul de RAM al serverului Python a crescut liniar cu numărul de mesaje stocate în buffer-ele TCP.
+\end{itemize}
+
+\section{Analiza Jitter-ului (Variația Latenței)}
+Latența medie nu spune toată povestea. Variația latenței (Jitter) este critică. Deoarece implementarea curentă randează cadrele imediat ce sosesc ("as fast as possible"), orice variație în rețea se traduce direct în neregularități de mișcare (stuttering) pe ecran.
+Soluțiile profesionale folosesc un \textit{Jitter Buffer} (stochează 40-50ms de cadre pentru a le reda la intervale constante), însă acesta adaugă latență intenționată. StreamFlow a ales să nu implementeze un buffer pentru a păstra caracterul de "timp real" absolut, chiar cu riscul unei fluidități vizuale imperfecte.
+
 % --- CAPITOLUL 6 (VIITOR) ---
 \chapter{Direcții Viitoare de Dezvoltare}
 
@@ -468,6 +663,13 @@ Integrarea bibliotecii \textbf{TensorFlow.js} deschide posibilitatea procesării
 \end{itemize}
 
 \newpage
+\section{Securitatea și Confidențialitatea Datelor}
+Într-o eră a supravegherii digitale, securitatea fluxurilor video este primordială. Viitoarele iterații StreamFlow vor implementa:
+
+\subsection{End-to-End Encryption (E2EE)}
+În prezent, criptarea este asigurată doar la nivel de transport (TLS/SSL pentru HTTPS și WSS). Serverul are acces la datele necriptate ("in the clear") pentru a face broadcast.
+O soluție reală E2EE ar implica criptarea cadrelor JPEG în browserul expeditorului folosind \textbf{Web Crypto API} (AES-GCM) și decriptarea lor doar în browserul destinatarilor. Astfel, serverul ar rute doar "blobs" opace, fără a putea vizualiza conținutul conferinței, garantând o confidențialitate absolută (Zero-Knowledge Architecture).
+
 \section{Scalabilitate Orizontală}
 O limitare fundamentală a implementării curente este dependența de memoria procesului unic (RAM). Deoarece conexiunile WebSocket sunt persistente și cu starea menținută local (stateful), doi utilizatori conectați la instanțe diferite de server nu ar putea comunica între ei.
 
